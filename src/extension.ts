@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { minimatch } from 'minimatch';
 
 const colorMap: Record<string, string> = {
   blue: 'terminal.ansiBlue',
@@ -16,6 +17,17 @@ const colorMap: Record<string, string> = {
 	custom6: 'folderPathColor.custom6',
 };
 
+interface FolderConfig {
+  path: string;
+  color?: string;
+  symbol?: string;
+  tooltip?: string;
+}
+
+interface FolderDecoration extends FolderConfig {
+  color: string;  // Make color required
+}
+
 class ColorDecorationProvider implements vscode.FileDecorationProvider {
   private readonly _onDidChangeFileDecorations: vscode.EventEmitter<
     vscode.Uri | vscode.Uri[] | undefined
@@ -23,22 +35,12 @@ class ColorDecorationProvider implements vscode.FileDecorationProvider {
   public readonly onDidChangeFileDecorations: vscode.Event<
     vscode.Uri | vscode.Uri[] | undefined
   > = this._onDidChangeFileDecorations.event;
-  private folders: {
-    path: string;
-    color: string;
-    symbol?: string;
-    tooltip?: string;
-  }[] = [];
+  private folders: FolderDecoration[] = [];
 
-  constructFolders() {
+  constructFolders(): void {
     this.folders = [];
     const config = vscode.workspace.getConfiguration('folder-path-color');
-    const folders: {
-      path: string;
-      color?: string;
-      symbol?: string;
-      tooltip?: string;
-    }[] = config.get('folders') || [];
+    const folders: FolderConfig[] = config.get('folders') || [];
     const colors = Object.keys(colorMap).filter(
       (color) => !folders.find((folder) => folder.color === color)
     );
@@ -58,7 +60,7 @@ class ColorDecorationProvider implements vscode.FileDecorationProvider {
   }
 
   constructor() {
-    vscode.workspace.onDidChangeConfiguration((e) => {
+    vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
       if (e.affectsConfiguration('folder-path-color.folders')) {
         this.constructFolders();
         this._onDidChangeFileDecorations.fire(undefined);
@@ -69,32 +71,31 @@ class ColorDecorationProvider implements vscode.FileDecorationProvider {
 
   provideFileDecoration(
     uri: vscode.Uri,
-    token: vscode.CancellationToken
+    _token: vscode.CancellationToken
   ): vscode.ProviderResult<vscode.FileDecoration> {
-    if (vscode.workspace.workspaceFolders) {
-      const workspacePaths = vscode.workspace.workspaceFolders.map(
-        (folder) => folder.uri.path
-      );
+    if (!vscode.workspace.workspaceFolders) {
+      return undefined;
+    }
 
-      let i = 0;
-      for (const folder of this.folders) {
-        let colorId = colorMap[folder.color];
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+    if (!workspaceFolder) {
+      return undefined;
+    }
 
-        const pathIsInConfig = workspacePaths.find((root) => {
-          const normalizedUriPath = uri.path.replace(/\\/g, '/');
-          const normalizedFolderPath = path.join(root, folder.path).replace(/\\/g, '/');
+    // Get the path relative to the workspace root
+    const relativePath = path.relative(workspaceFolder.uri.fsPath, uri.fsPath).replace(/\\/g, '/');
 
-          return normalizedUriPath.includes(normalizedFolderPath);
-        });
+    for (const folder of this.folders) {
+      const colorId = colorMap[folder.color];
+      const pattern = folder.path.replace(/\\/g, '/');
 
-        if (pathIsInConfig) {
-          return new vscode.FileDecoration(
-            folder.symbol,
-            folder.tooltip,
-            new vscode.ThemeColor(colorId)
-          );
-        }
-        i++;
+      // Use minimatch for glob pattern matching
+      if (minimatch(relativePath, pattern, { matchBase: true })) {
+        return new vscode.FileDecoration(
+          folder.symbol,
+          folder.tooltip,
+          new vscode.ThemeColor(colorId)
+        );
       }
     }
 

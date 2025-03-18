@@ -3,7 +3,7 @@
   "displayName": "Folder Path Color",
   "publisher": "VisbyDev",
   "description": "All subfolders within a specified path will be assigned a color for easy differentiation.",
-  "version": "0.0.14",
+  "version": "0.0.16",
   "icon": "/images/logo.png",
   "repository": {
     "type": "git",
@@ -108,9 +108,13 @@
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
   },
+  "dependencies": {
+    "minimatch": "^9.0.3"
+  },
   "devDependencies": {
     "@types/vscode": "^1.78.0",
     "@types/glob": "^8.1.0",
+    "@types/minimatch": "^5.1.2",
     "@types/mocha": "^10.0.1",
     "@types/node": "20.2.5",
     "@typescript-eslint/eslint-plugin": "^5.59.8",
